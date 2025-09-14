@@ -361,11 +361,11 @@ def export_data(format):
             
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
 if __name__ == '__main__':
     # Initialize knowledge base
     print("Initializing knowledge base...")
     rag_pipeline.initialize_knowledge_base()
     print("Knowledge base ready!")
-    
-    app.run(debug=True, host='0.0.0.0', port=9000)
+
+    # Run Flask in production mode (still using built-in server)
+    app.run(host='0.0.0.0', port=9000, debug=False, use_reloader=False)
