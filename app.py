@@ -46,7 +46,7 @@ def classify_bulk_tickets():
     try:
         # Load tickets from CSV
         if not os.path.exists('sample_tickets.csv'):
-            return jsonify({'error': 'sample_tickets.csv not found'}), 400
+            return jsonify({'error': 'sample_tickets.csv not found. Please ensure the file is included in the deployment.'}), 400
             
         # Read CSV using standard library
         tickets = []
