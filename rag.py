@@ -370,23 +370,46 @@ class RAGPipeline:
                 data = pickle.load(f)
                 self.documents = data['documents']
                 self.urls = data['urls']
-                self.document_vectors = data['document_vectors']
+                
+                # Check if document_vectors is in old scikit-learn format
+                document_vectors = data['document_vectors']
+                if hasattr(document_vectors, 'toarray'):  # csr_matrix from scikit-learn
+                    print("⚠️  Old index format detected. Rebuilding with new lightweight format...")
+                    # Rebuild index with new format
+                    self.document_vectors = [self._create_text_vector(doc) for doc in self.documents]
+                    # Save the updated index
+                    self.save_index(path)
+                    print("✅ Index rebuilt and saved with new format")
+                else:
+                    # New format - list of dictionaries
+                    self.document_vectors = document_vectors
+                    
             return True
-        except:
+        except Exception as e:
+            print(f"Failed to load index: {e}")
             return False
     
     def retrieve_relevant_docs(self, query, top_k=3):
         """
         Retrieve most relevant documents for a query using TF-IDF similarity
         """
-        if self.document_vectors is None:
+        if self.document_vectors is None or len(self.document_vectors) == 0:
+            return [], []
+            
+        # Safety check - ensure document_vectors is a list of dictionaries
+        if not isinstance(self.document_vectors, list):
+            print(f"⚠️  Invalid document_vectors type: {type(self.document_vectors)}")
             return [], []
             
         # Transform query using lightweight vectorization
         query_vector = self._create_text_vector(query)
         
         # Calculate similarities using lightweight method
-        similarities = [self._calculate_similarity(query_vector, doc_vec) for doc_vec in self.document_vectors]
+        try:
+            similarities = [self._calculate_similarity(query_vector, doc_vec) for doc_vec in self.document_vectors]
+        except Exception as e:
+            print(f"⚠️  Error calculating similarities: {e}")
+            return [], []
         
         # Get top-k most similar documents
         top_indices = sorted(range(len(similarities)), key=lambda i: similarities[i], reverse=True)[:top_k]
@@ -420,6 +443,11 @@ class RAGPipeline:
         """
         Calculate cosine similarity between two text vectors
         """
+        # Safety check - ensure both vectors are dictionaries
+        if not isinstance(vec1, dict) or not isinstance(vec2, dict):
+            print(f"⚠️  Invalid vector types: vec1={type(vec1)}, vec2={type(vec2)}")
+            return 0.0
+            
         # Get common words
         common_words = set(vec1.keys()) & set(vec2.keys())
         
