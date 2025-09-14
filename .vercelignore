@@ -10,8 +10,6 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-rag_index.pkl
-*.pkl
 .DS_Store
 Thumbs.db
 .git/
