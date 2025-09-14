@@ -368,4 +368,4 @@ if __name__ == '__main__':
     rag_pipeline.initialize_knowledge_base()
     print("Knowledge base ready!")
     
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=8000)
