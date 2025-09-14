@@ -40,3 +40,7 @@ build/
 *.egg-info/
 
 run.py
+
+DEPLOYMENT.md
+deploy.bat
+deploy.sh
