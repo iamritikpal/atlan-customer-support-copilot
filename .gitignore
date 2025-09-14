@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+
+# Virtual environment
+venv/
+.env/
+.env.*
+
+# API keys / secrets
+*.env
+secrets.json
+
+# Logs
+*.log
+logs/
+debug.log
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Node (in case you add npm later for frontend)
+node_modules/
+package-lock.json
+
+# Build / Dist
+dist/
+build/
+*.egg-info/
+
+run.py
