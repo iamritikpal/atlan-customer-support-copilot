@@ -1,14 +1,13 @@
 {
+    // Vercel deployment configuration for Atlan Customer Support Center
+    // This file configures how the Flask application is deployed on Vercel
+    
     "builds": [
-      { 
-        "src": "app.py", 
-        "use": "@vercel/python",
-        "config": {
-          "maxLambdaSize": "50mb"
-        }
-      }
+      // Build configuration: Use Python runtime for app.py
+      { "src": "app.py", "use": "@vercel/python" }
     ],
     "routes": [
+      // Route all requests to the Flask application
       { "src": "/(.*)", "dest": "app.py" }
     ]
   }
