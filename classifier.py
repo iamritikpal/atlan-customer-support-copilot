@@ -392,13 +392,13 @@ class TicketClassifier:
             "reasoning": "Rule-based classification using keyword matching"
         }
     
-    def classify_bulk_tickets(self, tickets_df):
+    def classify_bulk_tickets(self, tickets_list):
         """
-        Classify multiple tickets from a DataFrame with enhanced data
+        Classify multiple tickets from a list of dictionaries
         """
         results = []
         
-        for _, ticket in tickets_df.iterrows():
+        for ticket in tickets_list:
             classification = self.classify_ticket(ticket['subject'], ticket['description'])
             
             result = {

@@ -6,9 +6,8 @@ import pickle
 from dotenv import load_dotenv
 from urllib.parse import urljoin, urlparse
 import time
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-import numpy as np
+import re
+import math
 
 load_dotenv()
 
@@ -35,10 +34,9 @@ class RAGPipeline:
                 print(f"❌ Failed to initialize Azure OpenAI RAG client: {e}")
                 print("   Please check your Azure OpenAI configuration")
                 self.client = None
-        self.vectorizer = TfidfVectorizer(max_features=1000, stop_words='english')
-        self.document_vectors = None
         self.documents = []
         self.urls = []
+        self.stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must', 'can', 'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her', 'us', 'them'}
         
     def crawl_documentation(self, base_urls, max_pages=20):
         """
@@ -334,14 +332,15 @@ class RAGPipeline:
     
     def build_index(self):
         """
-        Build TF-IDF index from crawled documents
+        Build simple text index from crawled documents
         """
         if not self.documents:
             print("No documents to index. Please crawl first.")
             return
             
-        print("Building TF-IDF index...")
-        self.document_vectors = self.vectorizer.fit_transform(self.documents)
+        print("Building text index...")
+        # Simple indexing - just store the documents
+        # We'll use simple text matching for similarity
         
         print(f"Index built with {len(self.documents)} documents")
         
@@ -349,15 +348,13 @@ class RAGPipeline:
         """
         Save the index and documents to disk
         """
-        if self.document_vectors is None:
+        if not self.documents:
             return
             
         with open(f"{path}.pkl", "wb") as f:
             pickle.dump({
                 'documents': self.documents,
-                'urls': self.urls,
-                'vectorizer': self.vectorizer,
-                'document_vectors': self.document_vectors
+                'urls': self.urls
             }, f)
             
     def load_index(self, path="rag_index"):
@@ -369,32 +366,57 @@ class RAGPipeline:
                 data = pickle.load(f)
                 self.documents = data['documents']
                 self.urls = data['urls']
-                self.vectorizer = data['vectorizer']
-                self.document_vectors = data['document_vectors']
             return True
         except:
             return False
     
     def retrieve_relevant_docs(self, query, top_k=3):
         """
-        Retrieve most relevant documents for a query using TF-IDF similarity
+        Retrieve most relevant documents for a query using simple text similarity
         """
-        if self.document_vectors is None:
+        if not self.documents:
             return [], []
-            
-        # Transform query using the same vectorizer
-        query_vector = self.vectorizer.transform([query])
         
-        # Calculate cosine similarity
-        similarities = cosine_similarity(query_vector, self.document_vectors).flatten()
+        # Calculate simple text similarity scores
+        similarities = []
+        query_words = self._tokenize(query.lower())
         
-        # Get top-k most similar documents
-        top_indices = similarities.argsort()[-top_k:][::-1]
+        for i, doc in enumerate(self.documents):
+            doc_words = self._tokenize(doc.lower())
+            similarity = self._calculate_similarity(query_words, doc_words)
+            similarities.append((i, similarity))
         
-        relevant_docs = [self.documents[i] for i in top_indices if similarities[i] > 0]
-        relevant_urls = [self.urls[i] for i in top_indices if similarities[i] > 0]
+        # Sort by similarity and get top-k
+        similarities.sort(key=lambda x: x[1], reverse=True)
+        top_indices = [i for i, score in similarities[:top_k] if score > 0]
+        
+        relevant_docs = [self.documents[i] for i in top_indices]
+        relevant_urls = [self.urls[i] for i in top_indices]
         
         return relevant_docs, relevant_urls
+    
+    def _tokenize(self, text):
+        """Simple tokenization"""
+        # Remove punctuation and split into words
+        words = re.findall(r'\b\w+\b', text.lower())
+        # Remove stop words
+        return [word for word in words if word not in self.stop_words and len(word) > 2]
+    
+    def _calculate_similarity(self, query_words, doc_words):
+        """Calculate simple Jaccard similarity"""
+        if not query_words or not doc_words:
+            return 0
+        
+        query_set = set(query_words)
+        doc_set = set(doc_words)
+        
+        intersection = len(query_set.intersection(doc_set))
+        union = len(query_set.union(doc_set))
+        
+        if union == 0:
+            return 0
+        
+        return intersection / union
     
     def generate_answer(self, query, topic_tags):
         """
