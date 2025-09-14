@@ -45,5 +45,3 @@ DEPLOYMENT.md
 deploy.bat
 deploy.sh
 .vercel
-vercel.json
-./vercel.json
