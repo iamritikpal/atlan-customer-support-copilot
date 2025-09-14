@@ -589,7 +589,7 @@ function displayAnalyticsCharts(data) {
             return;
         }
         
-        // Hide placeholder and show charts
+    // Hide placeholder and show charts
         const placeholder = document.querySelector('.analytics-placeholder');
         const chartsContainer = document.getElementById('charts-container');
         

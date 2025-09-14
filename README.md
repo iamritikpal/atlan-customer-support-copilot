@@ -268,6 +268,9 @@ The application includes `sample_tickets.csv` with realistic support tickets cov
 - **SDK compatibility**
 - **Performance optimization**
 
+---
+
+
 ## 🔮 Future Enhancements
 
 ### 🎯 Planned Features
