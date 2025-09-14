@@ -168,8 +168,6 @@ graph TB
 3. **Configure Environment**
    ```bash
    # Create .env file
-   cp env_template.txt .env
-   
    # Edit .env with your credentials
    AZURE_OPENAI_API_KEY=your_azure_openai_api_key_here
    AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
@@ -179,8 +177,6 @@ graph TB
 
 4. **Run the Application**
    ```bash
-   python run.py
-   # OR
    python app.py
    ```
 
