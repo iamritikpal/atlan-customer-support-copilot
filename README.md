@@ -110,11 +110,6 @@ graph TB
   - 🎯 **Routing Messages** for: Connector, Lineage, Glossary, Sensitive data
 - **Source Citation**: All RAG-generated answers include source references
 
-### 📈 Advanced Analytics
-- **Real-time Metrics**: Ticket volume, confidence scores, priority distribution
-- **Interactive Charts**: Sentiment analysis, topic distribution, channel breakdown
-- **Export Capabilities**: CSV and JSON export options
-- **Trend Analysis**: Historical data insights
 
 ---
 
@@ -131,14 +126,6 @@ graph TB
 ### 🤖 Interactive AI Agent
 <img src="static/images/ss/s3.png" alt="AI Agent Interface" width="800" style="border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
 
-### 📊 Analytics Dashboard
-<img src="static/images/ss/s4.png" alt="Analytics Dashboard" width="800" style="border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
-
-### 🎯 Classification Analysis
-<img src="static/images/ss/s5.png" alt="Classification Analysis" width="800" style="border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
-
-### 📈 Sentiment Analysis
-<img src="static/images/ss/s6.png" alt="Sentiment Analysis" width="800" style="border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
 
 </div>
 
@@ -223,7 +210,6 @@ graph TB
 | **Vector Database** | FAISS | Lightweight, no server needed |
 | **Web Scraping** | BeautifulSoup + Requests | Simple, reliable crawling |
 | **Data Processing** | Pandas | Efficient data manipulation |
-| **Visualization** | Plotly | Interactive charts and graphs |
 
 ### 📁 Project Structure
 
