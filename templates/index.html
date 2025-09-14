@@ -29,6 +29,9 @@
                 <button class="nav-tab" data-tab="ai-agent">
                     <i class="fas fa-robot"></i> AI Agent
                 </button>
+                <button class="nav-tab" data-tab="analytics">
+                    <i class="fas fa-analytics"></i> Analytics
+                </button>
             </div>
             
             <!-- API Status -->
@@ -347,6 +350,51 @@
                 </div>
             </div>
 
+            <!-- Analytics Tab -->
+            <div id="analytics" class="tab-content">
+                <div class="section-header">
+                    <h2><i class="fas fa-analytics"></i> Analytics & Insights Dashboard</h2>
+                    <p>Advanced analytics and trends from ticket classification data</p>
+                </div>
+
+                <div id="analytics-content">
+                    <div class="analytics-placeholder">
+                        <i class="fas fa-chart-bar"></i>
+                        <p>Load and classify tickets first to see analytics</p>
+                    </div>
+                </div>
+
+                <!-- Charts will be populated by JavaScript -->
+                <div id="charts-container" style="display: none;">
+                    <div class="charts-grid">
+                        <div class="chart-card">
+                            <div id="priority-chart"></div>
+                        </div>
+                        <div class="chart-card">
+                            <div id="sentiment-chart"></div>
+                        </div>
+                        <div class="chart-card">
+                            <div id="topics-chart"></div>
+                        </div>
+                        <div class="chart-card">
+                            <div id="channels-chart"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Export Section -->
+                    <div class="export-section">
+                        <h3><i class="fas fa-download"></i> Export Data</h3>
+                        <div class="export-buttons">
+                            <button class="export-btn" data-format="csv">
+                                <i class="fas fa-file-csv"></i> Download CSV
+                            </button>
+                            <button class="export-btn" data-format="json">
+                                <i class="fas fa-file-code"></i> Download JSON
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </main>
 

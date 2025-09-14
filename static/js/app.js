@@ -50,6 +50,13 @@ function setupEventListeners() {
     document.getElementById('topic-filter').addEventListener('change', applyFilters);
     document.getElementById('channel-filter').addEventListener('change', applyFilters);
 
+    // Export buttons
+    document.querySelectorAll('.export-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const format = btn.dataset.format;
+            exportData(format);
+        });
+    });
 }
 
 function showTab(tabId) {
@@ -69,6 +76,10 @@ function showTab(tabId) {
         }
     });
 
+    // Load analytics if switching to analytics tab
+    if (tabId === 'analytics' && classifiedTickets.length > 0) {
+        loadAnalytics();
+    }
 }
 
 async function checkApiStatus() {
@@ -528,7 +539,198 @@ function formatSourceName(source) {
     }
 }
 
+async function loadAnalytics() {
+    if (classifiedTickets.length === 0) {
+        document.getElementById('analytics-content').innerHTML = `
+            <div class="analytics-placeholder">
+                <i class="fas fa-chart-bar"></i>
+                <p>Load and classify tickets first to see analytics</p>
+            </div>
+        `;
+        return;
+    }
+    
+    try {
+        console.log('Loading analytics for', classifiedTickets.length, 'tickets');
+        console.log('Sample ticket data:', classifiedTickets[0]);
+        
+        const response = await fetch('/api/analytics');
+        const data = await response.json();
+        
+        console.log('Analytics API response:', data);
+        
+        if (data.success) {
+            displayAnalyticsCharts(data);
+        } else {
+            throw new Error(data.error || 'Analytics loading failed');
+        }
+    } catch (error) {
+        console.error('Error loading analytics:', error);
+        document.getElementById('analytics-content').innerHTML = `
+            <div class="analytics-placeholder">
+                <i class="fas fa-exclamation-triangle"></i>
+                <p>Error loading analytics: ${error.message}</p>
+            </div>
+        `;
+    }
+}
 
+function displayAnalyticsCharts(data) {
+    try {
+        // Check if Plotly is available
+        if (typeof Plotly === 'undefined') {
+            console.error('Plotly library not loaded');
+            document.getElementById('charts-container').innerHTML = `
+                <div class="analytics-placeholder">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>Chart library not loaded. Please refresh the page.</p>
+                </div>
+            `;
+            return;
+        }
+        
+    // Hide placeholder and show charts
+        const placeholder = document.querySelector('.analytics-placeholder');
+        const chartsContainer = document.getElementById('charts-container');
+        
+        if (placeholder) {
+            placeholder.style.display = 'none';
+        }
+        if (chartsContainer) {
+            chartsContainer.style.display = 'block';
+        }
+        
+        console.log('Analytics data received:', data);
+        
+        // Render charts using Plotly with error handling
+        if (data.charts && data.charts.priority) {
+            try {
+                const priorityData = JSON.parse(data.charts.priority);
+                Plotly.newPlot('priority-chart', priorityData.data, priorityData.layout, {responsive: true});
+                console.log('Priority chart rendered successfully');
+            } catch (error) {
+                console.error('Error rendering priority chart:', error);
+            }
+        }
+        
+        if (data.charts && data.charts.sentiment) {
+            try {
+                const sentimentData = JSON.parse(data.charts.sentiment);
+                console.log('Sentiment chart data:', sentimentData);
+                
+                // Clear any existing content
+                document.getElementById('sentiment-chart').innerHTML = '';
+                
+                // Render the chart with additional configuration
+                Plotly.newPlot('sentiment-chart', sentimentData.data, sentimentData.layout, {
+                    responsive: true,
+                    displayModeBar: true,
+                    modeBarButtonsToRemove: ['pan2d', 'lasso2d', 'select2d']
+                });
+                
+                console.log('Sentiment chart rendered successfully');
+                
+                // Verify the chart was rendered by checking if it has content
+                setTimeout(() => {
+                    const chartElement = document.getElementById('sentiment-chart');
+                    if (chartElement && chartElement.children.length === 0) {
+                        console.warn('Chart container is empty after rendering attempt');
+                        chartElement.innerHTML = `
+                            <div style="padding: 20px; text-align: center; color: #dc3545;">
+                                <i class="fas fa-exclamation-triangle"></i>
+                                <p>Chart failed to render. Please refresh the page.</p>
+                            </div>
+                        `;
+                    }
+                }, 1000);
+                
+            } catch (error) {
+                console.error('Error rendering sentiment chart:', error);
+                // Show error message in the chart container
+                document.getElementById('sentiment-chart').innerHTML = `
+                    <div style="padding: 20px; text-align: center; color: #dc3545;">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <p>Error rendering sentiment chart: ${error.message}</p>
+                    </div>
+                `;
+            }
+        } else {
+            console.warn('No sentiment chart data available');
+            // Show placeholder message
+            document.getElementById('sentiment-chart').innerHTML = `
+                <div style="padding: 20px; text-align: center; color: #6c757d;">
+                    <i class="fas fa-chart-bar"></i>
+                    <p>No sentiment data available for chart</p>
+                </div>
+            `;
+        }
+        
+        if (data.charts && data.charts.topics) {
+            try {
+                const topicsData = JSON.parse(data.charts.topics);
+                Plotly.newPlot('topics-chart', topicsData.data, topicsData.layout, {responsive: true});
+                console.log('Topics chart rendered successfully');
+            } catch (error) {
+                console.error('Error rendering topics chart:', error);
+            }
+        }
+        
+        if (data.charts && data.charts.channels) {
+            try {
+                const channelsData = JSON.parse(data.charts.channels);
+                Plotly.newPlot('channels-chart', channelsData.data, channelsData.layout, {responsive: true});
+                console.log('Channels chart rendered successfully');
+            } catch (error) {
+                console.error('Error rendering channels chart:', error);
+            }
+        }
+        
+    } catch (error) {
+        console.error('Error in displayAnalyticsCharts:', error);
+        // Show error message
+        const chartsContainer = document.getElementById('charts-container');
+        if (chartsContainer) {
+            chartsContainer.innerHTML = `
+                <div class="analytics-placeholder">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>Error displaying charts: ${error.message}</p>
+                </div>
+            `;
+        }
+    }
+}
+
+async function exportData(format) {
+    if (classifiedTickets.length === 0) {
+        alert('No data to export. Please classify tickets first.');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/export/${format}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            // Create download link
+            const blob = new Blob([format === 'json' ? JSON.stringify(data.data, null, 2) : data.data], {
+                type: format === 'json' ? 'application/json' : 'text/csv'
+            });
+            
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = data.filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        } else {
+            throw new Error(data.error || 'Export failed');
+        }
+    } catch (error) {
+        alert('Error exporting data: ' + error.message);
+    }
+}
 
 // Utility functions
 function formatDate(dateString) {

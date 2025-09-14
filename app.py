@@ -1,10 +1,12 @@
 from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
+import pandas as pd
 import json
 import os
-import csv
 from classifier import TicketClassifier
 from rag import RAGPipeline
+import plotly.express as px
+import plotly.graph_objects as go
 from datetime import datetime
 
 app = Flask(__name__)
@@ -46,26 +48,19 @@ def classify_bulk_tickets():
     try:
         # Load tickets from CSV
         if not os.path.exists('sample_tickets.csv'):
-            return jsonify({'error': 'sample_tickets.csv not found. Please ensure the file is included in the deployment.'}), 400
+            return jsonify({'error': 'sample_tickets.csv not found'}), 400
             
-        # Read CSV using standard library
-        tickets = []
-        with open('sample_tickets.csv', 'r', encoding='utf-8') as file:
-            reader = csv.DictReader(file)
-            tickets = list(reader)
-        
-        if not tickets:
-            return jsonify({'error': 'No tickets found in CSV'}), 400
+        df = pd.read_csv('sample_tickets.csv')
         
         # Validate required columns
         required_columns = ['ticket_id', 'customer_name', 'subject', 'description']
-        missing_columns = [col for col in required_columns if col not in tickets[0].keys()]
+        missing_columns = [col for col in required_columns if col not in df.columns]
         if missing_columns:
             return jsonify({'error': f'Missing columns: {", ".join(missing_columns)}'}), 400
         
         # Classify tickets
         results = []
-        for ticket in tickets:
+        for _, ticket in df.iterrows():
             classification = classifier.classify_ticket(ticket['subject'], ticket['description'])
             
             result = {
@@ -167,8 +162,205 @@ def generate_response():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/debug-sentiment')
+def debug_sentiment():
+    """Debug endpoint to check sentiment data"""
+    global classified_tickets
+    
+    if not classified_tickets:
+        return jsonify({'error': 'No classified tickets available'}), 400
+    
+    try:
+        df = pd.DataFrame(classified_tickets)
+        sentiment_counts = df['sentiment'].value_counts().to_dict()
+        
+        return jsonify({
+            'total_tickets': len(df),
+            'sentiment_counts': sentiment_counts,
+            'sample_tickets': [
+                {
+                    'ticket_id': ticket['ticket_id'],
+                    'sentiment': ticket['sentiment'],
+                    'subject': ticket['subject'][:50] + '...' if len(ticket['subject']) > 50 else ticket['subject']
+                }
+                for ticket in classified_tickets[:5]
+            ]
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
+@app.route('/api/analytics')
+def get_analytics():
+    """Get analytics data for dashboard"""
+    global classified_tickets
+    
+    if not classified_tickets:
+        return jsonify({'error': 'No classified tickets available'}), 400
+    
+    try:
+        df = pd.DataFrame(classified_tickets)
+        
+        # Calculate metrics
+        total_tickets = len(df)
+        avg_confidence = df['confidence_score'].mean()
+        p0_count = len(df[df['priority'] == 'P0'])
+        p0_percentage = (p0_count / total_tickets) * 100
+        
+        # Priority distribution
+        priority_counts = df['priority'].value_counts().to_dict()
+        
+        # Sentiment distribution
+        sentiment_counts = df['sentiment'].value_counts().to_dict()
+        print(f"Sentiment counts: {sentiment_counts}")  # Debug logging
+        
+        # Topic distribution
+        all_topics = []
+        for tags in df['topic_tags']:
+            if isinstance(tags, list):
+                all_topics.extend(tags)
+            else:
+                all_topics.extend([tag.strip() for tag in str(tags).split(',')])
+        topic_counts = pd.Series(all_topics).value_counts().head(8).to_dict()
+        
+        # Channel distribution
+        channel_counts = df['channel'].value_counts().to_dict()
+        
+        # Generate Plotly charts
+        charts = {}
+        
+        # Priority pie chart
+        fig_priority = px.pie(
+            values=list(priority_counts.values()),
+            names=list(priority_counts.keys()),
+            title="Priority Distribution",
+            color_discrete_map={'P0': '#ff4757', 'P1': '#ffa726', 'P2': '#26a69a'}
+        )
+        charts['priority'] = fig_priority.to_json()
+        
+        # Sentiment bar chart with better error handling
+        try:
+            if sentiment_counts:
+                print(f"Creating sentiment chart with data: {sentiment_counts}")
+                
+                # Create a more robust bar chart using go.Bar
+                fig_sentiment = go.Figure()
+                
+                # Define colors for each sentiment
+                color_map = {
+                    'Angry': '#ff4757', 
+                    'Frustrated': '#ffa726', 
+                    'Curious': '#26a69a', 
+                    'Neutral': '#546e7a'
+                }
+                
+                # Add bars for each sentiment
+                for sentiment, count in sentiment_counts.items():
+                    fig_sentiment.add_trace(go.Bar(
+                        x=[sentiment],
+                        y=[count],
+                        name=sentiment,
+                        marker_color=color_map.get(sentiment, '#546e7a'),
+                        showlegend=False
+                    ))
+                
+                # Update layout
+                fig_sentiment.update_layout(
+                    title="Sentiment Analysis",
+                    xaxis_title="Sentiment",
+                    yaxis_title="Count",
+                    height=400,
+                    margin=dict(l=50, r=50, t=50, b=50),
+                    xaxis=dict(
+                        type='category',
+                        categoryorder='array',
+                        categoryarray=list(sentiment_counts.keys())
+                    ),
+                    yaxis=dict(
+                        type='linear',
+                        autorange=True
+                    )
+                )
+                
+                charts['sentiment'] = fig_sentiment.to_json()
+                print("Sentiment chart generated successfully")
+            else:
+                print("No sentiment data available for chart")
+                charts['sentiment'] = None
+        except Exception as e:
+            print(f"Error generating sentiment chart: {e}")
+            charts['sentiment'] = None
+        
+        # Topic horizontal bar chart
+        fig_topics = px.bar(
+            x=list(topic_counts.values()),
+            y=list(topic_counts.keys()),
+            orientation='h',
+            title="Top Topics",
+            color=list(topic_counts.values()),
+            color_continuous_scale='viridis'
+        )
+        fig_topics.update_layout(yaxis={'categoryorder':'total ascending'})
+        charts['topics'] = fig_topics.to_json()
+        
+        # Channel bar chart
+        fig_channels = px.bar(
+            x=list(channel_counts.keys()),
+            y=list(channel_counts.values()),
+            title="Tickets by Channel",
+            color=list(channel_counts.values()),
+            color_continuous_scale='blues'
+        )
+        charts['channels'] = fig_channels.to_json()
+        
+        return jsonify({
+            'success': True,
+            'metrics': {
+                'total_tickets': total_tickets,
+                'avg_confidence': round(avg_confidence, 2),
+                'p0_count': p0_count,
+                'p0_percentage': round(p0_percentage, 1)
+            },
+            'distributions': {
+                'priority': priority_counts,
+                'sentiment': sentiment_counts,
+                'topics': topic_counts,
+                'channels': channel_counts
+            },
+            'charts': charts
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
+@app.route('/api/export/<format>')
+def export_data(format):
+    """Export classified tickets data"""
+    global classified_tickets
+    
+    if not classified_tickets:
+        return jsonify({'error': 'No data to export'}), 400
+    
+    try:
+        df = pd.DataFrame(classified_tickets)
+        
+        if format == 'csv':
+            csv_data = df.to_csv(index=False)
+            return jsonify({
+                'success': True,
+                'data': csv_data,
+                'filename': 'atlan_ticket_analysis.csv'
+            })
+        elif format == 'json':
+            return jsonify({
+                'success': True,
+                'data': classified_tickets,
+                'filename': 'atlan_ticket_analysis.json'
+            })
+        else:
+            return jsonify({'error': 'Unsupported format'}), 400
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 if __name__ == '__main__':
     # Initialize knowledge base
     print("Initializing knowledge base...")
