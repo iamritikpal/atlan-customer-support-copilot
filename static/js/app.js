@@ -577,19 +577,7 @@ async function loadAnalytics() {
 
 function displayAnalyticsCharts(data) {
     try {
-        // Check if Plotly is available
-        if (typeof Plotly === 'undefined') {
-            console.error('Plotly library not loaded');
-            document.getElementById('charts-container').innerHTML = `
-                <div class="analytics-placeholder">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    <p>Chart library not loaded. Please refresh the page.</p>
-                </div>
-            `;
-            return;
-        }
-        
-    // Hide placeholder and show charts
+        // Hide placeholder and show charts
         const placeholder = document.querySelector('.analytics-placeholder');
         const chartsContainer = document.getElementById('charts-container');
         
@@ -602,61 +590,15 @@ function displayAnalyticsCharts(data) {
         
         console.log('Analytics data received:', data);
         
-        // Render charts using Plotly with error handling
+        // Render charts using lightweight HTML/CSS approach
         if (data.charts && data.charts.priority) {
-            try {
-                const priorityData = JSON.parse(data.charts.priority);
-                Plotly.newPlot('priority-chart', priorityData.data, priorityData.layout, {responsive: true});
-                console.log('Priority chart rendered successfully');
-            } catch (error) {
-                console.error('Error rendering priority chart:', error);
-            }
+            renderPieChart('priority-chart', data.charts.priority.data, data.charts.priority.colors, 'Priority Distribution');
         }
         
         if (data.charts && data.charts.sentiment) {
-            try {
-                const sentimentData = JSON.parse(data.charts.sentiment);
-                console.log('Sentiment chart data:', sentimentData);
-                
-                // Clear any existing content
-                document.getElementById('sentiment-chart').innerHTML = '';
-                
-                // Render the chart with additional configuration
-                Plotly.newPlot('sentiment-chart', sentimentData.data, sentimentData.layout, {
-                    responsive: true,
-                    displayModeBar: true,
-                    modeBarButtonsToRemove: ['pan2d', 'lasso2d', 'select2d']
-                });
-                
-                console.log('Sentiment chart rendered successfully');
-                
-                // Verify the chart was rendered by checking if it has content
-                setTimeout(() => {
-                    const chartElement = document.getElementById('sentiment-chart');
-                    if (chartElement && chartElement.children.length === 0) {
-                        console.warn('Chart container is empty after rendering attempt');
-                        chartElement.innerHTML = `
-                            <div style="padding: 20px; text-align: center; color: #dc3545;">
-                                <i class="fas fa-exclamation-triangle"></i>
-                                <p>Chart failed to render. Please refresh the page.</p>
-                            </div>
-                        `;
-                    }
-                }, 1000);
-                
-            } catch (error) {
-                console.error('Error rendering sentiment chart:', error);
-                // Show error message in the chart container
-                document.getElementById('sentiment-chart').innerHTML = `
-                    <div style="padding: 20px; text-align: center; color: #dc3545;">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <p>Error rendering sentiment chart: ${error.message}</p>
-                    </div>
-                `;
-            }
+            renderBarChart('sentiment-chart', data.charts.sentiment.data, data.charts.sentiment.colors, 'Sentiment Analysis');
         } else {
             console.warn('No sentiment chart data available');
-            // Show placeholder message
             document.getElementById('sentiment-chart').innerHTML = `
                 <div style="padding: 20px; text-align: center; color: #6c757d;">
                     <i class="fas fa-chart-bar"></i>
@@ -666,28 +608,15 @@ function displayAnalyticsCharts(data) {
         }
         
         if (data.charts && data.charts.topics) {
-            try {
-                const topicsData = JSON.parse(data.charts.topics);
-                Plotly.newPlot('topics-chart', topicsData.data, topicsData.layout, {responsive: true});
-                console.log('Topics chart rendered successfully');
-            } catch (error) {
-                console.error('Error rendering topics chart:', error);
-            }
+            renderHorizontalBarChart('topics-chart', data.charts.topics.data, 'Top Topics');
         }
         
         if (data.charts && data.charts.channels) {
-            try {
-                const channelsData = JSON.parse(data.charts.channels);
-                Plotly.newPlot('channels-chart', channelsData.data, channelsData.layout, {responsive: true});
-                console.log('Channels chart rendered successfully');
-            } catch (error) {
-                console.error('Error rendering channels chart:', error);
-            }
+            renderBarChart('channels-chart', data.charts.channels.data, {}, 'Tickets by Channel');
         }
         
     } catch (error) {
         console.error('Error in displayAnalyticsCharts:', error);
-        // Show error message
         const chartsContainer = document.getElementById('charts-container');
         if (chartsContainer) {
             chartsContainer.innerHTML = `
@@ -748,4 +677,103 @@ function debounce(func, wait) {
         clearTimeout(timeout);
         timeout = setTimeout(later, wait);
     };
+}
+
+// Lightweight chart rendering functions
+function renderPieChart(containerId, data, colors, title) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    
+    const total = Object.values(data).reduce((sum, val) => sum + val, 0);
+    if (total === 0) {
+        container.innerHTML = `<div style="padding: 20px; text-align: center;">No data available</div>`;
+        return;
+    }
+    
+    let html = `<div class="chart-title">${title}</div><div class="pie-chart-container">`;
+    
+    let currentAngle = 0;
+    const radius = 80;
+    const centerX = 100;
+    const centerY = 100;
+    
+    Object.entries(data).forEach(([key, value]) => {
+        const percentage = (value / total) * 100;
+        const angle = (value / total) * 360;
+        const color = colors[key] || '#6c757d';
+        
+        html += `
+            <div class="pie-slice-info">
+                <span class="pie-color" style="background-color: ${color}"></span>
+                <span>${key}: ${value} (${percentage.toFixed(1)}%)</span>
+            </div>
+        `;
+        currentAngle += angle;
+    });
+    
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function renderBarChart(containerId, data, colors, title) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    
+    const maxValue = Math.max(...Object.values(data));
+    if (maxValue === 0) {
+        container.innerHTML = `<div style="padding: 20px; text-align: center;">No data available</div>`;
+        return;
+    }
+    
+    let html = `<div class="chart-title">${title}</div><div class="bar-chart-container">`;
+    
+    Object.entries(data).forEach(([key, value]) => {
+        const percentage = (value / maxValue) * 100;
+        const color = colors[key] || '#007bff';
+        
+        html += `
+            <div class="bar-item">
+                <div class="bar-label">${key}</div>
+                <div class="bar-wrapper">
+                    <div class="bar" style="width: ${percentage}%; background-color: ${color}"></div>
+                    <span class="bar-value">${value}</span>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function renderHorizontalBarChart(containerId, data, title) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    
+    const maxValue = Math.max(...Object.values(data));
+    if (maxValue === 0) {
+        container.innerHTML = `<div style="padding: 20px; text-align: center;">No data available</div>`;
+        return;
+    }
+    
+    let html = `<div class="chart-title">${title}</div><div class="horizontal-bar-chart-container">`;
+    
+    Object.entries(data).forEach(([key, value]) => {
+        const percentage = (value / maxValue) * 100;
+        const hue = Math.random() * 360;
+        const color = `hsl(${hue}, 70%, 60%)`;
+        
+        html += `
+            <div class="horizontal-bar-item">
+                <div class="horizontal-bar-label">${key}</div>
+                <div class="horizontal-bar-wrapper">
+                    <div class="horizontal-bar" style="width: ${percentage}%; background-color: ${color}"></div>
+                    <span class="horizontal-bar-value">${value}</span>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    container.innerHTML = html;
 }

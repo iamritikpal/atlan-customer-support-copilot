@@ -6,9 +6,9 @@ import pickle
 from dotenv import load_dotenv
 from urllib.parse import urljoin, urlparse
 import time
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-import numpy as np
+import re
+import math
+from collections import Counter
 
 load_dotenv()
 
@@ -35,10 +35,12 @@ class RAGPipeline:
                 print(f"❌ Failed to initialize Azure OpenAI RAG client: {e}")
                 print("   Please check your Azure OpenAI configuration")
                 self.client = None
-        self.vectorizer = TfidfVectorizer(max_features=1000, stop_words='english')
-        self.document_vectors = None
         self.documents = []
         self.urls = []
+        self.document_vectors = []
+        self.stop_words = set([
+            'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must', 'can', 'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her', 'us', 'them'
+        ])
         
     def crawl_documentation(self, base_urls, max_pages=20):
         """
@@ -340,8 +342,8 @@ class RAGPipeline:
             print("No documents to index. Please crawl first.")
             return
             
-        print("Building TF-IDF index...")
-        self.document_vectors = self.vectorizer.fit_transform(self.documents)
+        print("Building lightweight text index...")
+        self.document_vectors = [self._create_text_vector(doc) for doc in self.documents]
         
         print(f"Index built with {len(self.documents)} documents")
         
@@ -356,7 +358,6 @@ class RAGPipeline:
             pickle.dump({
                 'documents': self.documents,
                 'urls': self.urls,
-                'vectorizer': self.vectorizer,
                 'document_vectors': self.document_vectors
             }, f)
             
@@ -369,7 +370,6 @@ class RAGPipeline:
                 data = pickle.load(f)
                 self.documents = data['documents']
                 self.urls = data['urls']
-                self.vectorizer = data['vectorizer']
                 self.document_vectors = data['document_vectors']
             return True
         except:
@@ -382,19 +382,61 @@ class RAGPipeline:
         if self.document_vectors is None:
             return [], []
             
-        # Transform query using the same vectorizer
-        query_vector = self.vectorizer.transform([query])
+        # Transform query using lightweight vectorization
+        query_vector = self._create_text_vector(query)
         
-        # Calculate cosine similarity
-        similarities = cosine_similarity(query_vector, self.document_vectors).flatten()
+        # Calculate similarities using lightweight method
+        similarities = [self._calculate_similarity(query_vector, doc_vec) for doc_vec in self.document_vectors]
         
         # Get top-k most similar documents
-        top_indices = similarities.argsort()[-top_k:][::-1]
+        top_indices = sorted(range(len(similarities)), key=lambda i: similarities[i], reverse=True)[:top_k]
         
         relevant_docs = [self.documents[i] for i in top_indices if similarities[i] > 0]
         relevant_urls = [self.urls[i] for i in top_indices if similarities[i] > 0]
         
         return relevant_docs, relevant_urls
+    
+    def _create_text_vector(self, text):
+        """
+        Create a lightweight text vector using term frequency
+        """
+        # Tokenize and clean text
+        words = re.findall(r'\b[a-zA-Z]+\b', text.lower())
+        # Remove stop words
+        words = [word for word in words if word not in self.stop_words and len(word) > 2]
+        
+        # Calculate term frequencies
+        word_count = Counter(words)
+        total_words = len(words)
+        
+        # Create TF vector (normalized by document length)
+        tf_vector = {}
+        for word, count in word_count.items():
+            tf_vector[word] = count / total_words if total_words > 0 else 0
+            
+        return tf_vector
+    
+    def _calculate_similarity(self, vec1, vec2):
+        """
+        Calculate cosine similarity between two text vectors
+        """
+        # Get common words
+        common_words = set(vec1.keys()) & set(vec2.keys())
+        
+        if not common_words:
+            return 0.0
+            
+        # Calculate dot product
+        dot_product = sum(vec1[word] * vec2[word] for word in common_words)
+        
+        # Calculate magnitudes
+        magnitude1 = math.sqrt(sum(val**2 for val in vec1.values()))
+        magnitude2 = math.sqrt(sum(val**2 for val in vec2.values()))
+        
+        if magnitude1 == 0 or magnitude2 == 0:
+            return 0.0
+            
+        return dot_product / (magnitude1 * magnitude2)
     
     def generate_answer(self, query, topic_tags):
         """

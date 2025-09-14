@@ -1,13 +1,12 @@
 from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
-import pandas as pd
 import json
 import os
+import csv
 from classifier import TicketClassifier
 from rag import RAGPipeline
-import plotly.express as px
-import plotly.graph_objects as go
 from datetime import datetime
+from collections import Counter
 
 app = Flask(__name__)
 CORS(app)
@@ -50,17 +49,25 @@ def classify_bulk_tickets():
         if not os.path.exists('sample_tickets.csv'):
             return jsonify({'error': 'sample_tickets.csv not found'}), 400
             
-        df = pd.read_csv('sample_tickets.csv')
+        # Read CSV file without pandas
+        tickets_data = []
+        with open('sample_tickets.csv', 'r', encoding='utf-8') as file:
+            csv_reader = csv.DictReader(file)
+            tickets_data = list(csv_reader)
         
         # Validate required columns
         required_columns = ['ticket_id', 'customer_name', 'subject', 'description']
-        missing_columns = [col for col in required_columns if col not in df.columns]
-        if missing_columns:
-            return jsonify({'error': f'Missing columns: {", ".join(missing_columns)}'}), 400
+        if tickets_data:
+            first_row_keys = set(tickets_data[0].keys())
+            missing_columns = [col for col in required_columns if col not in first_row_keys]
+            if missing_columns:
+                return jsonify({'error': f'Missing columns: {", ".join(missing_columns)}'}), 400
+        else:
+            return jsonify({'error': 'No tickets found in CSV file'}), 400
         
         # Classify tickets
         results = []
-        for _, ticket in df.iterrows():
+        for ticket in tickets_data:
             classification = classifier.classify_ticket(ticket['subject'], ticket['description'])
             
             result = {
@@ -171,12 +178,12 @@ def debug_sentiment():
         return jsonify({'error': 'No classified tickets available'}), 400
     
     try:
-        df = pd.DataFrame(classified_tickets)
-        sentiment_counts = df['sentiment'].value_counts().to_dict()
+        # Calculate sentiment counts without pandas
+        sentiment_counts = Counter(ticket['sentiment'] for ticket in classified_tickets)
         
         return jsonify({
-            'total_tickets': len(df),
-            'sentiment_counts': sentiment_counts,
+            'total_tickets': len(classified_tickets),
+            'sentiment_counts': dict(sentiment_counts),
             'sample_tickets': [
                 {
                     'ticket_id': ticket['ticket_id'],
@@ -198,119 +205,59 @@ def get_analytics():
         return jsonify({'error': 'No classified tickets available'}), 400
     
     try:
-        df = pd.DataFrame(classified_tickets)
-        
-        # Calculate metrics
-        total_tickets = len(df)
-        avg_confidence = df['confidence_score'].mean()
-        p0_count = len(df[df['priority'] == 'P0'])
-        p0_percentage = (p0_count / total_tickets) * 100
+        # Calculate metrics without pandas
+        total_tickets = len(classified_tickets)
+        confidence_scores = [ticket['confidence_score'] for ticket in classified_tickets]
+        avg_confidence = sum(confidence_scores) / len(confidence_scores) if confidence_scores else 0
+        p0_count = sum(1 for ticket in classified_tickets if ticket['priority'] == 'P0')
+        p0_percentage = (p0_count / total_tickets) * 100 if total_tickets > 0 else 0
         
         # Priority distribution
-        priority_counts = df['priority'].value_counts().to_dict()
+        priority_counts = Counter(ticket['priority'] for ticket in classified_tickets)
         
         # Sentiment distribution
-        sentiment_counts = df['sentiment'].value_counts().to_dict()
+        sentiment_counts = Counter(ticket['sentiment'] for ticket in classified_tickets)
         print(f"Sentiment counts: {sentiment_counts}")  # Debug logging
         
         # Topic distribution
         all_topics = []
-        for tags in df['topic_tags']:
+        for ticket in classified_tickets:
+            tags = ticket['topic_tags']
             if isinstance(tags, list):
                 all_topics.extend(tags)
             else:
                 all_topics.extend([tag.strip() for tag in str(tags).split(',')])
-        topic_counts = pd.Series(all_topics).value_counts().head(8).to_dict()
+        topic_counts = dict(Counter(all_topics).most_common(8))
         
         # Channel distribution
-        channel_counts = df['channel'].value_counts().to_dict()
+        channel_counts = Counter(ticket['channel'] for ticket in classified_tickets)
         
-        # Generate Plotly charts
-        charts = {}
-        
-        # Priority pie chart
-        fig_priority = px.pie(
-            values=list(priority_counts.values()),
-            names=list(priority_counts.keys()),
-            title="Priority Distribution",
-            color_discrete_map={'P0': '#ff4757', 'P1': '#ffa726', 'P2': '#26a69a'}
-        )
-        charts['priority'] = fig_priority.to_json()
-        
-        # Sentiment bar chart with better error handling
-        try:
-            if sentiment_counts:
-                print(f"Creating sentiment chart with data: {sentiment_counts}")
-                
-                # Create a more robust bar chart using go.Bar
-                fig_sentiment = go.Figure()
-                
-                # Define colors for each sentiment
-                color_map = {
+        # Generate simple chart data (no plotly dependency)
+        charts = {
+            'priority': {
+                'type': 'pie',
+                'data': dict(priority_counts),
+                'colors': {'P0': '#ff4757', 'P1': '#ffa726', 'P2': '#26a69a'}
+            },
+            'sentiment': {
+                'type': 'bar',
+                'data': dict(sentiment_counts),
+                'colors': {
                     'Angry': '#ff4757', 
                     'Frustrated': '#ffa726', 
                     'Curious': '#26a69a', 
                     'Neutral': '#546e7a'
                 }
-                
-                # Add bars for each sentiment
-                for sentiment, count in sentiment_counts.items():
-                    fig_sentiment.add_trace(go.Bar(
-                        x=[sentiment],
-                        y=[count],
-                        name=sentiment,
-                        marker_color=color_map.get(sentiment, '#546e7a'),
-                        showlegend=False
-                    ))
-                
-                # Update layout
-                fig_sentiment.update_layout(
-                    title="Sentiment Analysis",
-                    xaxis_title="Sentiment",
-                    yaxis_title="Count",
-                    height=400,
-                    margin=dict(l=50, r=50, t=50, b=50),
-                    xaxis=dict(
-                        type='category',
-                        categoryorder='array',
-                        categoryarray=list(sentiment_counts.keys())
-                    ),
-                    yaxis=dict(
-                        type='linear',
-                        autorange=True
-                    )
-                )
-                
-                charts['sentiment'] = fig_sentiment.to_json()
-                print("Sentiment chart generated successfully")
-            else:
-                print("No sentiment data available for chart")
-                charts['sentiment'] = None
-        except Exception as e:
-            print(f"Error generating sentiment chart: {e}")
-            charts['sentiment'] = None
-        
-        # Topic horizontal bar chart
-        fig_topics = px.bar(
-            x=list(topic_counts.values()),
-            y=list(topic_counts.keys()),
-            orientation='h',
-            title="Top Topics",
-            color=list(topic_counts.values()),
-            color_continuous_scale='viridis'
-        )
-        fig_topics.update_layout(yaxis={'categoryorder':'total ascending'})
-        charts['topics'] = fig_topics.to_json()
-        
-        # Channel bar chart
-        fig_channels = px.bar(
-            x=list(channel_counts.keys()),
-            y=list(channel_counts.values()),
-            title="Tickets by Channel",
-            color=list(channel_counts.values()),
-            color_continuous_scale='blues'
-        )
-        charts['channels'] = fig_channels.to_json()
+            },
+            'topics': {
+                'type': 'horizontal_bar',
+                'data': topic_counts
+            },
+            'channels': {
+                'type': 'bar',
+                'data': dict(channel_counts)
+            }
+        }
         
         return jsonify({
             'success': True,
@@ -321,10 +268,10 @@ def get_analytics():
                 'p0_percentage': round(p0_percentage, 1)
             },
             'distributions': {
-                'priority': priority_counts,
-                'sentiment': sentiment_counts,
+                'priority': dict(priority_counts),
+                'sentiment': dict(sentiment_counts),
                 'topics': topic_counts,
-                'channels': channel_counts
+                'channels': dict(channel_counts)
             },
             'charts': charts
         })
@@ -341,10 +288,15 @@ def export_data(format):
         return jsonify({'error': 'No data to export'}), 400
     
     try:
-        df = pd.DataFrame(classified_tickets)
-        
         if format == 'csv':
-            csv_data = df.to_csv(index=False)
+            # Generate CSV without pandas
+            import io
+            output = io.StringIO()
+            writer = csv.DictWriter(output, fieldnames=classified_tickets[0].keys())
+            writer.writeheader()
+            writer.writerows(classified_tickets)
+            csv_data = output.getvalue()
+            
             return jsonify({
                 'success': True,
                 'data': csv_data,
@@ -362,10 +314,21 @@ def export_data(format):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 if __name__ == '__main__':
-    # Initialize knowledge base
-    print("Initializing knowledge base...")
-    rag_pipeline.initialize_knowledge_base()
-    print("Knowledge base ready!")
-
-    # Run Flask in production mode (still using built-in server)
-    app.run(host='0.0.0.0', port=9000, debug=False, use_reloader=False)
+    # Initialize knowledge base (skip if in production/serverless)
+    if not os.environ.get('VERCEL'):
+        print("Initializing knowledge base...")
+        rag_pipeline.initialize_knowledge_base()
+        print("Knowledge base ready!")
+        
+        # Run Flask in development mode
+        app.run(host='0.0.0.0', port=9000, debug=True)
+    else:
+        # In production, try to load existing index or create minimal one
+        try:
+            rag_pipeline.load_index()
+            print("Loaded existing RAG index")
+        except:
+            print("No existing RAG index found, creating minimal fallback")
+            rag_pipeline.documents = ["Atlan is a modern data catalog platform."]
+            rag_pipeline.urls = ["https://atlan.com"]
+            rag_pipeline.build_index()
